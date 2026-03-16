@@ -1,0 +1,773 @@
+openapi: 3.1.0
+info:
+  title: Screenshot Capture Service (SCS)
+  description: |
+    Serviço standalone da SCS para captura automática de screenshots de URLs publicadas
+    via headless browser. Gera imagens de preview para templates, applications e deployments.
+  version: 1.0.0
+  contact:
+    name: SCS Engineering
+    url: https://www.example.com
+
+servers:
+  - url: https://screenshots-api.example.com/v1
+    description: Production
+  - url: https://screenshots-api-stage.example.com/v1
+    description: Staging
+  - url: http://localhost:3000/v1
+    description: Local development
+
+tags:
+  - name: Captures
+    description: Submissão e consulta de jobs de captura de screenshot
+  - name: Entities
+    description: Consulta e gerenciamento de screenshots por entidade
+  - name: Events
+    description: Webhook receiver para eventos internos
+  - name: Health
+    description: Health checks e métricas
+
+security:
+  - ApiKeyAuth: []
+
+paths:
+  /captures:
+    post:
+      tags: [Captures]
+      summary: Submeter job de captura
+      description: |
+        Cria um novo job de captura de screenshot para a URL fornecida.
+        Se já existe um job `queued` ou `running` para a mesma entidade, retorna o job existente (deduplicação).
+      operationId: createCapture
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCaptureRequest'
+            examples:
+              template:
+                summary: Captura de template
+                value:
+                  url: "https://example-template.example.app"
+                  entity_type: "template"
+                  entity_id: "sol-12345"
+                  options:
+                    viewports: ["card"]
+                    wait_strategy: "networkidle"
+                    delay_after_load_ms: 2000
+              templateWithCallback:
+                summary: Captura com callback
+                value:
+                  url: "https://example-template.example.app"
+                  entity_type: "template"
+                  entity_id: "sol-12345"
+                  callback_url: "https://api.example.com/internal/webhooks/screenshot-ready"
+                  options:
+                    viewports: ["card", "detail"]
+                    wait_strategy: "networkidle"
+                    wait_selector: "#app"
+                    wait_timeout_ms: 15000
+                    delay_after_load_ms: 2000
+              application:
+                summary: Captura de application (futuro)
+                value:
+                  url: "https://my-app.example.app"
+                  entity_type: "application"
+                  entity_id: "app-67890"
+      responses:
+        '202':
+          description: Job criado e enfileirado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateCaptureResponse'
+              example:
+                job_id: "job_abc123"
+                status: "queued"
+                created_at: "2026-03-16T10:00:00Z"
+                estimated_completion_seconds: 30
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: URL não permitida (fora da allowlist)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "url_not_allowed"
+                message: "The provided URL is not in the allowlist. Only *.example.app and *.example.net domains are allowed."
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /captures/bulk:
+    post:
+      tags: [Captures]
+      summary: Submeter capturas em lote
+      description: |
+        Cria múltiplos jobs de captura em uma única request. Útil para backfill inicial
+        de todos os templates existentes. Máximo de 100 items por request.
+      operationId: createBulkCapture
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkCaptureRequest'
+            example:
+              items:
+                - url: "https://t1.example.app"
+                  entity_type: "template"
+                  entity_id: "sol-001"
+                - url: "https://t2.example.app"
+                  entity_type: "template"
+                  entity_id: "sol-002"
+              priority: "low"
+      responses:
+        '202':
+          description: Lote enfileirado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkCaptureResponse'
+              example:
+                batch_id: "batch_xyz"
+                total_jobs: 2
+                status: "queued"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /captures/{job_id}:
+    get:
+      tags: [Captures]
+      summary: Consultar status de um job
+      description: |
+        Retorna o status atual do job e, se concluído com sucesso, os screenshots gerados.
+        Clientes podem fazer polling neste endpoint enquanto status é `queued` ou `running`.
+      operationId: getCapture
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '200':
+          description: Status do job
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CaptureStatus'
+              examples:
+                queued:
+                  summary: Job na fila
+                  value:
+                    job_id: "job_abc123"
+                    status: "queued"
+                    url: "https://example-template.example.app"
+                    entity_type: "template"
+                    entity_id: "sol-12345"
+                    attempts: 0
+                    created_at: "2026-03-16T10:00:00Z"
+                    started_at: null
+                    completed_at: null
+                    results: []
+                succeeded:
+                  summary: Captura concluída
+                  value:
+                    job_id: "job_abc123"
+                    status: "succeeded"
+                    url: "https://example-template.example.app"
+                    entity_type: "template"
+                    entity_id: "sol-12345"
+                    attempts: 1
+                    created_at: "2026-03-16T10:00:00Z"
+                    started_at: "2026-03-16T10:00:01Z"
+                    completed_at: "2026-03-16T10:00:12Z"
+                    results:
+                      - viewport: "card"
+                        width: 400
+                        height: 300
+                        format: "webp"
+                        image_url: "https://screenshots.example.com/template/sol-12345/card-400x300-v1710583212.webp"
+                        file_size_bytes: 24576
+                      - viewport: "detail"
+                        width: 1280
+                        height: 800
+                        format: "webp"
+                        image_url: "https://screenshots.example.com/template/sol-12345/detail-1280x800-v1710583212.webp"
+                        file_size_bytes: 89120
+                failed:
+                  summary: Captura falhou
+                  value:
+                    job_id: "job_abc123"
+                    status: "failed"
+                    url: "https://example-template.example.app"
+                    entity_type: "template"
+                    entity_id: "sol-12345"
+                    attempts: 3
+                    created_at: "2026-03-16T10:00:00Z"
+                    started_at: "2026-03-16T10:00:01Z"
+                    completed_at: "2026-03-16T10:01:30Z"
+                    error:
+                      code: "blank_page"
+                      message: "Screenshot detected as blank after 3 attempts with escalated wait strategies"
+                    results: []
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /entities/{entity_type}/{entity_id}/screenshots:
+    get:
+      tags: [Entities]
+      summary: Listar screenshots de uma entidade
+      description: |
+        Retorna os screenshots mais recentes (is_latest=true) para uma entidade específica.
+        Se nenhum screenshot existe, retorna lista vazia.
+      operationId: getEntityScreenshots
+      parameters:
+        - $ref: '#/components/parameters/EntityType'
+        - $ref: '#/components/parameters/EntityId'
+      responses:
+        '200':
+          description: Screenshots da entidade
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntityScreenshots'
+              examples:
+                withScreenshots:
+                  summary: Entidade com screenshots
+                  value:
+                    entity_type: "template"
+                    entity_id: "sol-12345"
+                    latest_capture_at: "2026-03-16T10:00:12Z"
+                    screenshots:
+                      - viewport: "card"
+                        image_url: "https://screenshots.example.com/template/sol-12345/card-400x300-v1710583212.webp"
+                        width: 400
+                        height: 300
+                        format: "webp"
+                      - viewport: "detail"
+                        image_url: "https://screenshots.example.com/template/sol-12345/detail-1280x800-v1710583212.webp"
+                        width: 1280
+                        height: 800
+                        format: "webp"
+                empty:
+                  summary: Entidade sem screenshots
+                  value:
+                    entity_type: "template"
+                    entity_id: "sol-99999"
+                    latest_capture_at: null
+                    screenshots: []
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    delete:
+      tags: [Entities]
+      summary: Remover screenshots de uma entidade
+      description: |
+        Remove todos os screenshots de uma entidade do storage e do banco de dados.
+        Operação irreversível.
+      operationId: deleteEntityScreenshots
+      parameters:
+        - $ref: '#/components/parameters/EntityType'
+        - $ref: '#/components/parameters/EntityId'
+      responses:
+        '204':
+          description: Screenshots removidos com sucesso
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /events:
+    post:
+      tags: [Events]
+      summary: Receber evento interno (webhook)
+      description: |
+        Endpoint para receber eventos de sistemas internos da SCS (ex: Marketplace API, Deploy Pipeline).
+        Autenticação via HMAC-SHA256 no header X-Webhook-Signature.
+      operationId: receiveEvent
+      security:
+        - WebhookSignature: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookEvent'
+            examples:
+              templatePublished:
+                summary: Template publicado
+                value:
+                  event_type: "template.published"
+                  entity_type: "template"
+                  entity_id: "sol-12345"
+                  url: "https://updated-template.example.app"
+                  timestamp: "2026-03-16T10:00:00Z"
+              templateUpdated:
+                summary: Template atualizado
+                value:
+                  event_type: "template.updated"
+                  entity_type: "template"
+                  entity_id: "sol-12345"
+                  url: "https://updated-template.example.app"
+                  timestamp: "2026-03-16T11:30:00Z"
+              deploymentFinished:
+                summary: Deploy finalizado (futuro)
+                value:
+                  event_type: "deployment.finished"
+                  entity_type: "deployment"
+                  entity_id: "deploy-11111"
+                  url: "https://my-app.example.app"
+                  timestamp: "2026-03-16T14:00:00Z"
+      responses:
+        '202':
+          description: Evento recebido e captura enfileirada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateCaptureResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Assinatura do webhook inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /healthz:
+    get:
+      tags: [Health]
+      summary: Liveness check
+      description: Retorna 200 se a API está up
+      operationId: healthCheck
+      security: []
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "ok"
+
+  /readyz:
+    get:
+      tags: [Health]
+      summary: Readiness check
+      description: Retorna 200 se API, database e queue estão conectados
+      operationId: readinessCheck
+      security: []
+      responses:
+        '200':
+          description: All dependencies ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "ok"
+                  db:
+                    type: string
+                    example: "connected"
+                  queue:
+                    type: string
+                    example: "connected"
+        '503':
+          description: One or more dependencies unavailable
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "degraded"
+                  db:
+                    type: string
+                    example: "disconnected"
+                  queue:
+                    type: string
+                    example: "connected"
+
+  /metrics:
+    get:
+      tags: [Health]
+      summary: Prometheus metrics
+      description: Retorna métricas no formato Prometheus text exposition
+      operationId: getMetrics
+      security: []
+      responses:
+        '200':
+          description: Metrics in Prometheus format
+          content:
+            text/plain:
+              schema:
+                type: string
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+      description: API key para autenticação de clientes externos
+    WebhookSignature:
+      type: apiKey
+      in: header
+      name: X-Webhook-Signature
+      description: HMAC-SHA256 signature para webhooks internos
+
+  parameters:
+    JobId:
+      name: job_id
+      in: path
+      required: true
+      description: Identificador único do job de captura
+      schema:
+        type: string
+        format: uuid
+        example: "job_abc123"
+
+    EntityType:
+      name: entity_type
+      in: path
+      required: true
+      description: Tipo da entidade
+      schema:
+        type: string
+        enum: [template, application, deployment]
+        example: "template"
+
+    EntityId:
+      name: entity_id
+      in: path
+      required: true
+      description: ID da entidade no sistema de origem
+      schema:
+        type: string
+        example: "sol-12345"
+
+  schemas:
+    CreateCaptureRequest:
+      type: object
+      required: [url, entity_type, entity_id]
+      properties:
+        url:
+          type: string
+          format: uri
+          description: URL para capturar. Deve ser HTTPS e estar na allowlist.
+          example: "https://example-template.example.app"
+        entity_type:
+          type: string
+          enum: [template, application, deployment]
+          description: Tipo da entidade
+          example: "template"
+        entity_id:
+          type: string
+          description: ID da entidade no sistema de origem
+          example: "sol-12345"
+        callback_url:
+          type: string
+          format: uri
+          description: URL para POST com resultado após captura (opcional)
+          example: "https://api.example.com/internal/webhooks/screenshot-ready"
+        options:
+          $ref: '#/components/schemas/CaptureOptions'
+
+    CaptureOptions:
+      type: object
+      properties:
+        viewports:
+          type: array
+          items:
+            type: string
+            enum: [card, detail, og]
+          default: ["card"]
+          description: Viewports a capturar
+          example: ["card", "detail"]
+        wait_strategy:
+          type: string
+          enum: [networkidle, domcontentloaded, load]
+          default: "networkidle"
+          description: Estratégia de espera antes da captura
+        wait_selector:
+          type: string
+          description: CSS selector para esperar antes de capturar
+          example: "#app"
+        wait_timeout_ms:
+          type: integer
+          minimum: 1000
+          maximum: 60000
+          default: 15000
+          description: Timeout para wait strategy (ms)
+        delay_after_load_ms:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          default: 2000
+          description: Delay adicional após load event (ms)
+
+    CreateCaptureResponse:
+      type: object
+      properties:
+        job_id:
+          type: string
+          format: uuid
+          description: Identificador único do job criado
+        status:
+          type: string
+          enum: [queued]
+          description: Status inicial do job
+        created_at:
+          type: string
+          format: date-time
+          description: Timestamp de criação
+        estimated_completion_seconds:
+          type: integer
+          description: Estimativa de tempo até conclusão (segundos)
+
+    CaptureStatus:
+      type: object
+      properties:
+        job_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [queued, running, processing_images, succeeded, failed, cancelled]
+          description: |
+            Status do job:
+            - `queued`: Na fila, aguardando worker
+            - `running`: Worker executando captura
+            - `processing_images`: Captura ok, processando imagens
+            - `succeeded`: Imagens prontas via CDN
+            - `failed`: Falha após todos os retries
+            - `cancelled`: Cancelado manualmente
+        url:
+          type: string
+          format: uri
+        entity_type:
+          type: string
+          enum: [template, application, deployment]
+        entity_id:
+          type: string
+        attempts:
+          type: integer
+          description: Número de tentativas realizadas
+        created_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        error:
+          $ref: '#/components/schemas/CaptureError'
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScreenshotResult'
+
+    CaptureError:
+      type: object
+      nullable: true
+      properties:
+        code:
+          type: string
+          enum:
+            - timeout
+            - dns_failure
+            - connection_refused
+            - blank_page
+            - ssl_error
+            - http_4xx
+            - http_5xx
+            - browser_crash
+            - blocked_by_firewall
+            - url_not_allowed
+            - internal_error
+          description: Código do erro
+        message:
+          type: string
+          description: Mensagem descritiva do erro
+
+    ScreenshotResult:
+      type: object
+      properties:
+        viewport:
+          type: string
+          enum: [card, detail, og]
+          description: Viewport capturado
+        width:
+          type: integer
+          description: Largura em pixels
+        height:
+          type: integer
+          description: Altura em pixels
+        format:
+          type: string
+          enum: [webp, png, avif]
+          description: Formato da imagem
+        image_url:
+          type: string
+          format: uri
+          description: URL pública da imagem via CDN
+        file_size_bytes:
+          type: integer
+          description: Tamanho do arquivo em bytes
+
+    EntityScreenshots:
+      type: object
+      properties:
+        entity_type:
+          type: string
+          enum: [template, application, deployment]
+        entity_id:
+          type: string
+        latest_capture_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp da captura mais recente
+        screenshots:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScreenshotResult'
+
+    BulkCaptureRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            type: object
+            required: [url, entity_type, entity_id]
+            properties:
+              url:
+                type: string
+                format: uri
+              entity_type:
+                type: string
+                enum: [template, application, deployment]
+              entity_id:
+                type: string
+          description: Lista de capturas a processar (máx. 100)
+        priority:
+          type: string
+          enum: [high, low]
+          default: "high"
+          description: Prioridade da fila (low para backfill)
+
+    BulkCaptureResponse:
+      type: object
+      properties:
+        batch_id:
+          type: string
+          format: uuid
+          description: Identificador do lote
+        total_jobs:
+          type: integer
+          description: Número de jobs criados
+        status:
+          type: string
+          enum: [queued]
+
+    WebhookEvent:
+      type: object
+      required: [event_type, entity_type, entity_id, url]
+      properties:
+        event_type:
+          type: string
+          enum:
+            - template.published
+            - template.updated
+            - deployment.finished
+            - manual.trigger
+          description: Tipo do evento
+        entity_type:
+          type: string
+          enum: [template, application, deployment]
+        entity_id:
+          type: string
+        url:
+          type: string
+          format: uri
+          description: URL para capturar
+        timestamp:
+          type: string
+          format: date-time
+          description: Timestamp do evento no sistema de origem
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Código do erro
+        message:
+          type: string
+          description: Mensagem descritiva
+
+  responses:
+    BadRequest:
+      description: Request inválida
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "validation_error"
+            message: "url is required and must be a valid HTTPS URL"
+
+    Unauthorized:
+      description: Autenticação inválida ou ausente
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "unauthorized"
+            message: "Invalid or missing API key"
+
+    NotFound:
+      description: Recurso não encontrado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "not_found"
+            message: "Job not found"
+
+    TooManyRequests:
+      description: Rate limit excedido
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+          description: Segundos até o rate limit resetar
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "rate_limit_exceeded"
+            message: "Too many requests. Please retry after 60 seconds."
