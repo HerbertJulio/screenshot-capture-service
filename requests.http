@@ -1,12 +1,12 @@
 ### ============================================================================
-### Screenshot Capture Service — Testes
+### Screenshot Capture Service — Tests
 ### ============================================================================
 
 @baseUrl = http://localhost:3000
 @apiKey = dev-api-key
 
 
-### Capturar screenshot de um site
+### Capture a screenshot from a website
 POST {{baseUrl}}/v1/captures
 Content-Type: application/json
 X-API-Key: {{apiKey}}
@@ -24,7 +24,7 @@ X-API-Key: {{apiKey}}
 
 ###
 
-### Consultar resultado (substituir o job_id)
+### Check result (replace the job_id)
 @jobId = REPLACE_WITH_JOB_ID
 GET {{baseUrl}}/v1/captures/{{jobId}}
 X-API-Key: {{apiKey}}

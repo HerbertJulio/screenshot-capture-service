@@ -1,8 +1,8 @@
 # Screenshot Capture Service
 
-Servico de captura automatizada de screenshots de URLs via headless browser. Recebe uma URL, gera previews em resolucoes configuradas (notebook, desktop, Open Graph) e armazena as imagens em storage S3-compatible ou filesystem local.
+Automated URL screenshot capture service via headless browser. Receives a URL, generates previews at configurable resolutions (laptop, desktop, Open Graph) and stores the images in S3-compatible storage or local filesystem.
 
-## Arquitetura
+## Architecture
 
 ```
                     POST /v1/captures
@@ -39,36 +39,36 @@ Servico de captura automatizada de screenshots de URLs via headless browser. Rec
 
 ## Stack
 
-| Componente | Tecnologia |
+| Component | Technology |
 |---|---|
 | API | Fastify 5 (~75k req/s) |
 | Browser | Playwright + Chromium |
-| Imagens | Sharp (PNG -> WebP, quality 80) |
+| Images | Sharp (PNG -> WebP, quality 80) |
 | Database | SQLite via better-sqlite3 (WAL mode) |
-| Storage | S3-compatible ou filesystem local |
-| Validacao | Zod |
-| Logs | Pino (JSON structured) |
+| Storage | S3-compatible or local filesystem |
+| Validation | Zod |
+| Logging | Pino (JSON structured) |
 | Runtime | Node.js 20+ |
 
 ## Quick Start
 
 ```bash
-# Instalar dependencias
+# Install dependencies
 npm install
 
-# Instalar browser do Playwright
+# Install Playwright browser
 npx playwright install chromium
 
-# Copiar config
+# Copy config
 cp .env.example .env
 
-# Rodar em dev
+# Run in dev mode
 npm run dev
 ```
 
-## Uso
+## Usage
 
-### Capturar screenshot
+### Capture a screenshot
 
 ```bash
 curl -X POST http://localhost:3000/v1/captures \
@@ -86,7 +86,7 @@ curl -X POST http://localhost:3000/v1/captures \
   }'
 ```
 
-Resposta:
+Response:
 ```json
 {
   "job_id": "abc-123-...",
@@ -95,60 +95,60 @@ Resposta:
 }
 ```
 
-### Consultar resultado
+### Check result
 
 ```bash
 curl http://localhost:3000/v1/captures/<job_id> \
   -H "X-API-Key: dev-api-key"
 ```
 
-### Testes via VSCode
+### Testing via VSCode
 
-Abra `requests.http` com a extensao [REST Client](https://marketplace.visualstudio.com/items?itemName=humao.rest-client) e clique em "Send Request".
+Open `requests.http` with the [REST Client](https://marketplace.visualstudio.com/items?itemName=humao.rest-client) extension and click "Send Request".
 
 ## Endpoints
 
-| Metodo | Endpoint | Descricao |
+| Method | Endpoint | Description |
 |---|---|---|
-| `POST` | `/v1/captures` | Criar job de captura |
-| `POST` | `/v1/captures/bulk` | Criar ate 100 jobs em lote |
-| `GET` | `/v1/captures/:job_id` | Consultar status e resultado |
-| `GET` | `/v1/entities/:type/:id/screenshots` | Listar screenshots de uma entidade |
-| `DELETE` | `/v1/entities/:type/:id/screenshots` | Deletar screenshots |
+| `POST` | `/v1/captures` | Create a capture job |
+| `POST` | `/v1/captures/bulk` | Create up to 100 jobs in batch |
+| `GET` | `/v1/captures/:job_id` | Check job status and results |
+| `GET` | `/v1/entities/:type/:id/screenshots` | List screenshots for an entity |
+| `DELETE` | `/v1/entities/:type/:id/screenshots` | Delete screenshots |
 | `POST` | `/v1/events` | Webhook receiver (HMAC-signed) |
 | `GET` | `/healthz` | Health check |
 | `GET` | `/readyz` | Readiness (DB connectivity) |
-| `GET` | `/metrics` | Metricas Prometheus |
+| `GET` | `/metrics` | Prometheus metrics |
 
 ## Viewports
 
-| Nome | Resolucao | Uso |
+| Name | Resolution | Use |
 |---|---|---|
-| `card` | 1366x768 | Preview (tela de notebook) |
-| `detail` | 1280x800 | Pagina de detalhe |
+| `card` | 1366x768 | Preview (laptop screen) |
+| `detail` | 1280x800 | Detail page |
 
-## Configuracao
+## Configuration
 
-Variaveis de ambiente (ver `.env.example`):
+Environment variables (see `.env.example`):
 
-| Variavel | Default | Descricao |
+| Variable | Default | Description |
 |---|---|---|
-| `PORT` | 3000 | Porta do servidor |
-| `API_KEY` | - | Chave de autenticacao (obrigatoria) |
-| `CAPTURE_TIMEOUT_MS` | 30000 | Timeout de navegacao |
-| `CAPTURE_DELAY_AFTER_LOAD_MS` | 2000 | Delay apos carregamento da pagina |
-| `MAX_CONCURRENT_CAPTURES` | 3 | Capturas paralelas simultaneas |
-| `BROWSER_RECYCLE_AFTER` | 10 | Reciclar browser a cada N capturas |
-| `USE_LOCAL_STORAGE` | false | Salvar em disco ao inves de S3 |
-| `URL_ALLOWLIST_PATTERNS` | `.*` | Regex de URLs permitidas |
+| `PORT` | 3000 | Server port |
+| `API_KEY` | - | Authentication key (required) |
+| `CAPTURE_TIMEOUT_MS` | 30000 | Navigation timeout |
+| `CAPTURE_DELAY_AFTER_LOAD_MS` | 2000 | Delay after page load |
+| `MAX_CONCURRENT_CAPTURES` | 3 | Simultaneous parallel captures |
+| `BROWSER_RECYCLE_AFTER` | 10 | Recycle browser every N captures |
+| `USE_LOCAL_STORAGE` | false | Save to disk instead of S3 |
+| `URL_ALLOWLIST_PATTERNS` | `.*` | Allowed URL regex patterns |
 
 ## Performance
 
-- **Fastify** em vez de Express (~5x mais rapido para HTTP)
-- **Worker pool** com capturas paralelas (configuravel via `MAX_CONCURRENT_CAPTURES`)
-- **SQLite otimizado**: WAL mode, 64MB cache, memory-mapped I/O (256MB)
-- **Browser pooling**: reutiliza instancia Chromium entre capturas
-- **Blank page detection**: evita salvar screenshots vazios, re-tenta com scroll
+- **Fastify** instead of Express (~5x faster for HTTP)
+- **Worker pool** with parallel captures (configurable via `MAX_CONCURRENT_CAPTURES`)
+- **Optimized SQLite**: WAL mode, 64MB cache, memory-mapped I/O (256MB)
+- **Browser pooling**: reuses Chromium instance between captures
+- **Blank page detection**: avoids saving empty screenshots, retries with scroll
 
 ## Docker
 
@@ -156,7 +156,7 @@ Variaveis de ambiente (ver `.env.example`):
 docker compose -f docker/docker-compose.yml up
 ```
 
-## Estrutura do Projeto
+## Project Structure
 
 ```
 src/
@@ -183,6 +183,6 @@ src/
         └── api.types.ts
 ```
 
-## Licenca
+## License
 
 MIT

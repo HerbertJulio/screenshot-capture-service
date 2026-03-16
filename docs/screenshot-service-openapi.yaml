@@ -2,8 +2,8 @@ openapi: 3.1.0
 info:
   title: Screenshot Capture Service (SCS)
   description: |
-    Serviço standalone da SCS para captura automática de screenshots de URLs publicadas
-    via headless browser. Gera imagens de preview para templates, applications e deployments.
+    SCS standalone service for automatic screenshot capture of published URLs
+    via headless browser. Generates preview images for templates, applications, and deployments.
   version: 1.0.0
   contact:
     name: SCS Engineering
@@ -19,13 +19,13 @@ servers:
 
 tags:
   - name: Captures
-    description: Submissão e consulta de jobs de captura de screenshot
+    description: Submission and querying of screenshot capture jobs
   - name: Entities
-    description: Consulta e gerenciamento de screenshots por entidade
+    description: Querying and management of screenshots by entity
   - name: Events
-    description: Webhook receiver para eventos internos
+    description: Webhook receiver for internal events
   - name: Health
-    description: Health checks e métricas
+    description: Health checks and metrics
 
 security:
   - ApiKeyAuth: []
@@ -34,10 +34,10 @@ paths:
   /captures:
     post:
       tags: [Captures]
-      summary: Submeter job de captura
+      summary: Submit capture job
       description: |
-        Cria um novo job de captura de screenshot para a URL fornecida.
-        Se já existe um job `queued` ou `running` para a mesma entidade, retorna o job existente (deduplicação).
+        Creates a new screenshot capture job for the provided URL.
+        If a `queued` or `running` job already exists for the same entity, returns the existing job (deduplication).
       operationId: createCapture
       requestBody:
         required: true
@@ -47,7 +47,7 @@ paths:
               $ref: '#/components/schemas/CreateCaptureRequest'
             examples:
               template:
-                summary: Captura de template
+                summary: Template capture
                 value:
                   url: "https://example-template.example.app"
                   entity_type: "template"
@@ -57,7 +57,7 @@ paths:
                     wait_strategy: "networkidle"
                     delay_after_load_ms: 2000
               templateWithCallback:
-                summary: Captura com callback
+                summary: Capture with callback
                 value:
                   url: "https://example-template.example.app"
                   entity_type: "template"
@@ -70,14 +70,14 @@ paths:
                     wait_timeout_ms: 15000
                     delay_after_load_ms: 2000
               application:
-                summary: Captura de application (futuro)
+                summary: Application capture (future)
                 value:
                   url: "https://my-app.example.app"
                   entity_type: "application"
                   entity_id: "app-67890"
       responses:
         '202':
-          description: Job criado e enfileirado com sucesso
+          description: Job created and enqueued successfully
           content:
             application/json:
               schema:
@@ -92,7 +92,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
-          description: URL não permitida (fora da allowlist)
+          description: URL not allowed (outside the allowlist)
           content:
             application/json:
               schema:
@@ -106,10 +106,10 @@ paths:
   /captures/bulk:
     post:
       tags: [Captures]
-      summary: Submeter capturas em lote
+      summary: Submit bulk captures
       description: |
-        Cria múltiplos jobs de captura em uma única request. Útil para backfill inicial
-        de todos os templates existentes. Máximo de 100 items por request.
+        Creates multiple capture jobs in a single request. Useful for initial backfill
+        of all existing templates. Maximum of 100 items per request.
       operationId: createBulkCapture
       requestBody:
         required: true
@@ -128,7 +128,7 @@ paths:
               priority: "low"
       responses:
         '202':
-          description: Lote enfileirado com sucesso
+          description: Batch enqueued successfully
           content:
             application/json:
               schema:
@@ -147,23 +147,23 @@ paths:
   /captures/{job_id}:
     get:
       tags: [Captures]
-      summary: Consultar status de um job
+      summary: Query job status
       description: |
-        Retorna o status atual do job e, se concluído com sucesso, os screenshots gerados.
-        Clientes podem fazer polling neste endpoint enquanto status é `queued` ou `running`.
+        Returns the current job status and, if completed successfully, the generated screenshots.
+        Clients can poll this endpoint while the status is `queued` or `running`.
       operationId: getCapture
       parameters:
         - $ref: '#/components/parameters/JobId'
       responses:
         '200':
-          description: Status do job
+          description: Job status
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/CaptureStatus'
               examples:
                 queued:
-                  summary: Job na fila
+                  summary: Job in queue
                   value:
                     job_id: "job_abc123"
                     status: "queued"
@@ -176,7 +176,7 @@ paths:
                     completed_at: null
                     results: []
                 succeeded:
-                  summary: Captura concluída
+                  summary: Capture completed
                   value:
                     job_id: "job_abc123"
                     status: "succeeded"
@@ -201,7 +201,7 @@ paths:
                         image_url: "https://screenshots.example.com/template/sol-12345/detail-1280x800-v1710583212.webp"
                         file_size_bytes: 89120
                 failed:
-                  summary: Captura falhou
+                  summary: Capture failed
                   value:
                     job_id: "job_abc123"
                     status: "failed"
@@ -224,24 +224,24 @@ paths:
   /entities/{entity_type}/{entity_id}/screenshots:
     get:
       tags: [Entities]
-      summary: Listar screenshots de uma entidade
+      summary: List screenshots for an entity
       description: |
-        Retorna os screenshots mais recentes (is_latest=true) para uma entidade específica.
-        Se nenhum screenshot existe, retorna lista vazia.
+        Returns the most recent screenshots (is_latest=true) for a specific entity.
+        If no screenshots exist, returns an empty list.
       operationId: getEntityScreenshots
       parameters:
         - $ref: '#/components/parameters/EntityType'
         - $ref: '#/components/parameters/EntityId'
       responses:
         '200':
-          description: Screenshots da entidade
+          description: Entity screenshots
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/EntityScreenshots'
               examples:
                 withScreenshots:
-                  summary: Entidade com screenshots
+                  summary: Entity with screenshots
                   value:
                     entity_type: "template"
                     entity_id: "sol-12345"
@@ -258,7 +258,7 @@ paths:
                         height: 800
                         format: "webp"
                 empty:
-                  summary: Entidade sem screenshots
+                  summary: Entity without screenshots
                   value:
                     entity_type: "template"
                     entity_id: "sol-99999"
@@ -269,27 +269,27 @@ paths:
 
     delete:
       tags: [Entities]
-      summary: Remover screenshots de uma entidade
+      summary: Remove screenshots for an entity
       description: |
-        Remove todos os screenshots de uma entidade do storage e do banco de dados.
-        Operação irreversível.
+        Removes all screenshots for an entity from storage and the database.
+        This operation is irreversible.
       operationId: deleteEntityScreenshots
       parameters:
         - $ref: '#/components/parameters/EntityType'
         - $ref: '#/components/parameters/EntityId'
       responses:
         '204':
-          description: Screenshots removidos com sucesso
+          description: Screenshots removed successfully
         '401':
           $ref: '#/components/responses/Unauthorized'
 
   /events:
     post:
       tags: [Events]
-      summary: Receber evento interno (webhook)
+      summary: Receive internal event (webhook)
       description: |
-        Endpoint para receber eventos de sistemas internos da SCS (ex: Marketplace API, Deploy Pipeline).
-        Autenticação via HMAC-SHA256 no header X-Webhook-Signature.
+        Endpoint to receive events from SCS internal systems (e.g., Marketplace API, Deploy Pipeline).
+        Authentication via HMAC-SHA256 in the X-Webhook-Signature header.
       operationId: receiveEvent
       security:
         - WebhookSignature: []
@@ -301,7 +301,7 @@ paths:
               $ref: '#/components/schemas/WebhookEvent'
             examples:
               templatePublished:
-                summary: Template publicado
+                summary: Template published
                 value:
                   event_type: "template.published"
                   entity_type: "template"
@@ -309,7 +309,7 @@ paths:
                   url: "https://updated-template.example.app"
                   timestamp: "2026-03-16T10:00:00Z"
               templateUpdated:
-                summary: Template atualizado
+                summary: Template updated
                 value:
                   event_type: "template.updated"
                   entity_type: "template"
@@ -317,7 +317,7 @@ paths:
                   url: "https://updated-template.example.app"
                   timestamp: "2026-03-16T11:30:00Z"
               deploymentFinished:
-                summary: Deploy finalizado (futuro)
+                summary: Deployment finished (future)
                 value:
                   event_type: "deployment.finished"
                   entity_type: "deployment"
@@ -326,7 +326,7 @@ paths:
                   timestamp: "2026-03-16T14:00:00Z"
       responses:
         '202':
-          description: Evento recebido e captura enfileirada
+          description: Event received and capture enqueued
           content:
             application/json:
               schema:
@@ -334,7 +334,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
-          description: Assinatura do webhook inválida
+          description: Invalid webhook signature
           content:
             application/json:
               schema:
@@ -344,7 +344,7 @@ paths:
     get:
       tags: [Health]
       summary: Liveness check
-      description: Retorna 200 se a API está up
+      description: Returns 200 if the API is up
       operationId: healthCheck
       security: []
       responses:
@@ -363,7 +363,7 @@ paths:
     get:
       tags: [Health]
       summary: Readiness check
-      description: Retorna 200 se API, database e queue estão conectados
+      description: Returns 200 if API, database, and queue are connected
       operationId: readinessCheck
       security: []
       responses:
@@ -404,7 +404,7 @@ paths:
     get:
       tags: [Health]
       summary: Prometheus metrics
-      description: Retorna métricas no formato Prometheus text exposition
+      description: Returns metrics in Prometheus text exposition format
       operationId: getMetrics
       security: []
       responses:
@@ -421,19 +421,19 @@ components:
       type: apiKey
       in: header
       name: X-Api-Key
-      description: API key para autenticação de clientes externos
+      description: API key for external client authentication
     WebhookSignature:
       type: apiKey
       in: header
       name: X-Webhook-Signature
-      description: HMAC-SHA256 signature para webhooks internos
+      description: HMAC-SHA256 signature for internal webhooks
 
   parameters:
     JobId:
       name: job_id
       in: path
       required: true
-      description: Identificador único do job de captura
+      description: Unique identifier of the capture job
       schema:
         type: string
         format: uuid
@@ -443,7 +443,7 @@ components:
       name: entity_type
       in: path
       required: true
-      description: Tipo da entidade
+      description: Entity type
       schema:
         type: string
         enum: [template, application, deployment]
@@ -453,7 +453,7 @@ components:
       name: entity_id
       in: path
       required: true
-      description: ID da entidade no sistema de origem
+      description: Entity ID in the source system
       schema:
         type: string
         example: "sol-12345"
@@ -466,21 +466,21 @@ components:
         url:
           type: string
           format: uri
-          description: URL para capturar. Deve ser HTTPS e estar na allowlist.
+          description: URL to capture. Must be HTTPS and in the allowlist.
           example: "https://example-template.example.app"
         entity_type:
           type: string
           enum: [template, application, deployment]
-          description: Tipo da entidade
+          description: Entity type
           example: "template"
         entity_id:
           type: string
-          description: ID da entidade no sistema de origem
+          description: Entity ID in the source system
           example: "sol-12345"
         callback_url:
           type: string
           format: uri
-          description: URL para POST com resultado após captura (opcional)
+          description: URL for POST with result after capture (optional)
           example: "https://api.example.com/internal/webhooks/screenshot-ready"
         options:
           $ref: '#/components/schemas/CaptureOptions'
@@ -494,29 +494,29 @@ components:
             type: string
             enum: [card, detail, og]
           default: ["card"]
-          description: Viewports a capturar
+          description: Viewports to capture
           example: ["card", "detail"]
         wait_strategy:
           type: string
           enum: [networkidle, domcontentloaded, load]
           default: "networkidle"
-          description: Estratégia de espera antes da captura
+          description: Wait strategy before capture
         wait_selector:
           type: string
-          description: CSS selector para esperar antes de capturar
+          description: CSS selector to wait for before capturing
           example: "#app"
         wait_timeout_ms:
           type: integer
           minimum: 1000
           maximum: 60000
           default: 15000
-          description: Timeout para wait strategy (ms)
+          description: Timeout for wait strategy (ms)
         delay_after_load_ms:
           type: integer
           minimum: 0
           maximum: 10000
           default: 2000
-          description: Delay adicional após load event (ms)
+          description: Additional delay after load event (ms)
 
     CreateCaptureResponse:
       type: object
@@ -524,18 +524,18 @@ components:
         job_id:
           type: string
           format: uuid
-          description: Identificador único do job criado
+          description: Unique identifier of the created job
         status:
           type: string
           enum: [queued]
-          description: Status inicial do job
+          description: Initial job status
         created_at:
           type: string
           format: date-time
-          description: Timestamp de criação
+          description: Creation timestamp
         estimated_completion_seconds:
           type: integer
-          description: Estimativa de tempo até conclusão (segundos)
+          description: Estimated time until completion (seconds)
 
     CaptureStatus:
       type: object
@@ -547,13 +547,13 @@ components:
           type: string
           enum: [queued, running, processing_images, succeeded, failed, cancelled]
           description: |
-            Status do job:
-            - `queued`: Na fila, aguardando worker
-            - `running`: Worker executando captura
-            - `processing_images`: Captura ok, processando imagens
-            - `succeeded`: Imagens prontas via CDN
-            - `failed`: Falha após todos os retries
-            - `cancelled`: Cancelado manualmente
+            Job status:
+            - `queued`: In queue, waiting for worker
+            - `running`: Worker executing capture
+            - `processing_images`: Capture ok, processing images
+            - `succeeded`: Images ready via CDN
+            - `failed`: Failed after all retries
+            - `cancelled`: Manually cancelled
         url:
           type: string
           format: uri
@@ -564,7 +564,7 @@ components:
           type: string
         attempts:
           type: integer
-          description: Número de tentativas realizadas
+          description: Number of attempts performed
         created_at:
           type: string
           format: date-time
@@ -601,10 +601,10 @@ components:
             - blocked_by_firewall
             - url_not_allowed
             - internal_error
-          description: Código do erro
+          description: Error code
         message:
           type: string
-          description: Mensagem descritiva do erro
+          description: Descriptive error message
 
     ScreenshotResult:
       type: object
@@ -612,24 +612,24 @@ components:
         viewport:
           type: string
           enum: [card, detail, og]
-          description: Viewport capturado
+          description: Captured viewport
         width:
           type: integer
-          description: Largura em pixels
+          description: Width in pixels
         height:
           type: integer
-          description: Altura em pixels
+          description: Height in pixels
         format:
           type: string
           enum: [webp, png, avif]
-          description: Formato da imagem
+          description: Image format
         image_url:
           type: string
           format: uri
-          description: URL pública da imagem via CDN
+          description: Public image URL via CDN
         file_size_bytes:
           type: integer
-          description: Tamanho do arquivo em bytes
+          description: File size in bytes
 
     EntityScreenshots:
       type: object
@@ -643,7 +643,7 @@ components:
           type: string
           format: date-time
           nullable: true
-          description: Timestamp da captura mais recente
+          description: Timestamp of the most recent capture
         screenshots:
           type: array
           items:
@@ -669,12 +669,12 @@ components:
                 enum: [template, application, deployment]
               entity_id:
                 type: string
-          description: Lista de capturas a processar (máx. 100)
+          description: List of captures to process (max. 100)
         priority:
           type: string
           enum: [high, low]
           default: "high"
-          description: Prioridade da fila (low para backfill)
+          description: Queue priority (low for backfill)
 
     BulkCaptureResponse:
       type: object
@@ -682,10 +682,10 @@ components:
         batch_id:
           type: string
           format: uuid
-          description: Identificador do lote
+          description: Batch identifier
         total_jobs:
           type: integer
-          description: Número de jobs criados
+          description: Number of jobs created
         status:
           type: string
           enum: [queued]
@@ -701,7 +701,7 @@ components:
             - template.updated
             - deployment.finished
             - manual.trigger
-          description: Tipo do evento
+          description: Event type
         entity_type:
           type: string
           enum: [template, application, deployment]
@@ -710,25 +710,25 @@ components:
         url:
           type: string
           format: uri
-          description: URL para capturar
+          description: URL to capture
         timestamp:
           type: string
           format: date-time
-          description: Timestamp do evento no sistema de origem
+          description: Event timestamp in the source system
 
     ErrorResponse:
       type: object
       properties:
         error:
           type: string
-          description: Código do erro
+          description: Error code
         message:
           type: string
-          description: Mensagem descritiva
+          description: Descriptive message
 
   responses:
     BadRequest:
-      description: Request inválida
+      description: Invalid request
       content:
         application/json:
           schema:
@@ -738,7 +738,7 @@ components:
             message: "url is required and must be a valid HTTPS URL"
 
     Unauthorized:
-      description: Autenticação inválida ou ausente
+      description: Invalid or missing authentication
       content:
         application/json:
           schema:
@@ -748,7 +748,7 @@ components:
             message: "Invalid or missing API key"
 
     NotFound:
-      description: Recurso não encontrado
+      description: Resource not found
       content:
         application/json:
           schema:
@@ -758,12 +758,12 @@ components:
             message: "Job not found"
 
     TooManyRequests:
-      description: Rate limit excedido
+      description: Rate limit exceeded
       headers:
         Retry-After:
           schema:
             type: integer
-          description: Segundos até o rate limit resetar
+          description: Seconds until the rate limit resets
       content:
         application/json:
           schema:
