@@ -3,7 +3,8 @@ import { webhookEventSchema } from '../../shared/types/api.types.js'
 import { verifyWebhookSignature } from '../middleware/auth.js'
 import { validateUrl } from '../../shared/security/url-validator.js'
 import { createJob, findActiveJob } from '../../shared/db/database.js'
-import type { CaptureOptions, ViewportName } from '../../shared/types/job.types.js'
+import type { CaptureOptions } from '../../shared/types/job.types.js'
+import type { ViewportName } from '../../shared/config.js'
 
 export function registerEventRoutes(app: FastifyInstance): void {
   // POST /v1/events — webhook receiver

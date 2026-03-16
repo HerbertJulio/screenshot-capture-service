@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { createCaptureSchema, bulkCaptureSchema } from '../../shared/types/api.types.js'
-import { validateUrl } from '../../shared/security/url-validator.js'
+import { validateUrl, validateCallbackUrl } from '../../shared/security/url-validator.js'
 import {
   createJob,
   findActiveJob,
@@ -28,6 +28,17 @@ export function registerCaptureRoutes(app: FastifyInstance): void {
         error: 'url_not_allowed',
         message: urlCheck.reason,
       })
+    }
+
+    // Validate callback URL if provided
+    if (input.callback_url) {
+      const callbackCheck = await validateCallbackUrl(input.callback_url)
+      if (!callbackCheck.valid) {
+        return reply.code(400).send({
+          error: 'invalid_callback_url',
+          message: callbackCheck.reason,
+        })
+      }
     }
 
     // Deduplication

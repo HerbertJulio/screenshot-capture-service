@@ -7,8 +7,16 @@ export async function apiKeyAuth(
   reply: FastifyReply
 ): Promise<void> {
   const apiKey = request.headers['x-api-key']
-  if (!apiKey || apiKey !== getConfig().API_KEY) {
-    reply.code(401).send({ error: 'unauthorized', message: 'Invalid or missing API key' })
+  if (!apiKey || typeof apiKey !== 'string') {
+    return reply.code(401).send({ error: 'unauthorized', message: 'Missing API key' })
+  }
+
+  const expected = getConfig().API_KEY
+  const apiKeyBuf = Buffer.from(apiKey)
+  const expectedBuf = Buffer.from(expected)
+
+  if (apiKeyBuf.length !== expectedBuf.length || !timingSafeEqual(apiKeyBuf, expectedBuf)) {
+    return reply.code(401).send({ error: 'unauthorized', message: 'Invalid API key' })
   }
 }
 

@@ -19,6 +19,14 @@ export function createApp() {
   const RATE_LIMIT = 60
   const RATE_WINDOW_MS = 60_000
 
+  // Prune expired entries every 5 minutes
+  setInterval(() => {
+    const now = Date.now()
+    for (const [key, entry] of rateLimitMap) {
+      if (now > entry.resetAt) rateLimitMap.delete(key)
+    }
+  }, 5 * 60_000).unref()
+
   // Auth + rate limit for API routes
   app.addHook('onRequest', async (request, reply) => {
     const path = request.url
@@ -48,7 +56,7 @@ export function createApp() {
       entry.count++
       if (entry.count > RATE_LIMIT) {
         const retryAfter = Math.ceil((entry.resetAt - now) / 1000)
-        reply
+        return reply
           .code(429)
           .header('Retry-After', retryAfter)
           .send({

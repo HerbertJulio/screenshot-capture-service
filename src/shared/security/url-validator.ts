@@ -70,3 +70,41 @@ export async function validateUrl(url: string): Promise<{ valid: boolean; reason
 
   return { valid: true }
 }
+
+export async function validateCallbackUrl(url: string): Promise<{ valid: boolean; reason?: string }> {
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    return { valid: false, reason: 'Invalid callback URL format' }
+  }
+
+  if (parsed.protocol !== 'https:') {
+    return { valid: false, reason: 'Only HTTPS callback URLs are allowed' }
+  }
+
+  if (parsed.username || parsed.password) {
+    return { valid: false, reason: 'Callback URLs with credentials are not allowed' }
+  }
+
+  // Block private IPs
+  const hostname = parsed.hostname
+  try {
+    let ips: string[]
+    if (isIP(hostname)) {
+      ips = [hostname]
+    } else {
+      ips = await resolve(hostname)
+    }
+
+    for (const ip of ips) {
+      if (isPrivateIp(ip)) {
+        return { valid: false, reason: `Callback URL resolves to private IP ${ip}` }
+      }
+    }
+  } catch {
+    return { valid: false, reason: `DNS resolution failed for callback ${hostname}` }
+  }
+
+  return { valid: true }
+}

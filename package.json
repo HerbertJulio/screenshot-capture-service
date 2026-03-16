@@ -26,6 +26,12 @@
     "tsx": "^4.19.0",
     "typescript": "^5.7.0"
   },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/HerbertJulio/screenshot-capture-service.git"
+  },
+  "keywords": ["screenshot", "capture", "headless-browser", "playwright", "fastify"],
   "engines": {
     "node": ">=20.0.0"
   }

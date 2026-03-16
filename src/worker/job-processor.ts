@@ -4,6 +4,7 @@ import {
   updateJobStatus,
   insertScreenshot,
   getScreenshotsByJobId,
+  recoverStaleJobs,
 } from '../shared/db/database.js'
 import { captureScreenshots } from './capture-engine.js'
 import { uploadScreenshot, buildStorageKey, buildCdnUrl } from '../processing/storage-uploader.js'
@@ -47,7 +48,7 @@ function classifyError(error: unknown): { code: ErrorCode; message: string } {
     return { code: 'browser_crash', message: msg }
   if (lower.includes('404') || lower.includes('403'))
     return { code: 'http_4xx', message: msg }
-  if (lower.includes('5') && lower.includes('00'))
+  if (/\b5\d{2}\b/.test(msg))
     return { code: 'http_5xx', message: msg }
 
   return { code: 'internal_error', message: msg }
@@ -251,5 +252,3 @@ export function stopWorker(): void {
   logger.info({ activeJobs }, 'Worker stopped')
 }
 
-// Re-export for stale recovery
-import { recoverStaleJobs } from '../shared/db/database.js'
