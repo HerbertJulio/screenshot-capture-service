@@ -1,13 +1,14 @@
 import type { FastifyInstance } from 'fastify'
-import { getDb, getJobCountByStatus } from '../../shared/db/database.js'
+import { getDb } from '../../infra/database/connection.js'
+import type { Container } from '../../container.js'
 
-export function registerHealthRoutes(app: FastifyInstance): void {
-  // GET /healthz
+export function registerHealthRoutes(app: FastifyInstance, container: Container): void {
+  const { jobRepo } = container
+
   app.get('/healthz', async () => {
     return { status: 'ok' }
   })
 
-  // GET /readyz
   app.get('/readyz', async (_request, reply) => {
     try {
       getDb().prepare('SELECT 1').get()
@@ -18,9 +19,8 @@ export function registerHealthRoutes(app: FastifyInstance): void {
     }
   })
 
-  // GET /metrics
   app.get('/metrics', async (_request, reply) => {
-    const counts = getJobCountByStatus()
+    const counts = jobRepo.getJobCountByStatus()
     const lines: string[] = [
       '# HELP scs_jobs_total Total capture jobs by status',
       '# TYPE scs_jobs_total gauge',

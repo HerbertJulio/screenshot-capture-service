@@ -1,15 +1,13 @@
 import type { FastifyInstance } from 'fastify'
-import { webhookEventSchema } from '../../shared/types/api.types.js'
+import { webhookEventSchema } from '../../domain/types.js'
 import { verifyWebhookSignature } from '../middleware/auth.js'
-import { validateUrl } from '../../shared/security/url-validator.js'
-import { createJob, findActiveJob } from '../../shared/db/database.js'
-import type { CaptureOptions } from '../../shared/types/job.types.js'
-import type { ViewportName } from '../../shared/config.js'
+import type { Container } from '../../container.js'
+import { toJobCreatedResponse } from '../mappers/job-response.mapper.js'
 
-export function registerEventRoutes(app: FastifyInstance): void {
-  // POST /v1/events — webhook receiver
+export function registerEventRoutes(app: FastifyInstance, container: Container): void {
+  const { processWebhookEvent } = container.useCases
+
   app.post('/v1/events', async (request, reply) => {
-    // Verify webhook signature
     const signature = request.headers['x-webhook-signature'] as string | undefined
     if (!signature) {
       return reply.code(401).send({
@@ -39,50 +37,20 @@ export function registerEventRoutes(app: FastifyInstance): void {
     }
 
     const event = parsed.data
-    const urlCheck = await validateUrl(event.url)
-    if (!urlCheck.valid) {
-      return reply.code(403).send({
-        error: 'url_not_allowed',
-        message: urlCheck.reason,
-      })
-    }
-
-    // Deduplication
-    const existing = findActiveJob(event.entity_type, event.entity_id)
-    if (existing) {
-      return reply.code(202).send({
-        job_id: existing.id,
-        status: existing.status,
-        created_at: existing.createdAt,
-        deduplicated: true,
-      })
-    }
-
-    const viewports: ViewportName[] =
-      event.event_type === 'template.published' || event.event_type === 'template.updated'
-        ? ['card', 'detail']
-        : ['card']
-
-    const options: CaptureOptions = {
-      viewports,
-      waitStrategy: 'networkidle',
-      waitSelector: null,
-      waitTimeoutMs: 15_000,
-      delayAfterLoadMs: 2000,
-    }
-
-    const job = createJob({
-      url: event.url,
+    const result = await processWebhookEvent.execute({
+      eventType: event.event_type,
       entityType: event.entity_type,
       entityId: event.entity_id,
-      options,
-      priority: 3, // high priority for events
+      url: event.url,
     })
 
-    return reply.code(202).send({
-      job_id: job.id,
-      status: job.status,
-      created_at: job.createdAt,
-    })
+    switch (result.type) {
+      case 'url_not_allowed':
+        return reply.code(403).send({ error: 'url_not_allowed', message: result.reason })
+      case 'deduplicated':
+        return reply.code(202).send(toJobCreatedResponse(result.job, true))
+      case 'created':
+        return reply.code(202).send(toJobCreatedResponse(result.job))
+    }
   })
 }

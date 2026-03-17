@@ -27,6 +27,19 @@ const envSchema = z.object({
     .string()
     .default('.*')
     .transform((v) => v.split(',').map((p) => new RegExp(p.trim()))),
+}).superRefine((data, ctx) => {
+  if (!data.USE_LOCAL_STORAGE && data.S3_ENDPOINT) {
+    const required = ['S3_BUCKET', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY', 'CDN_BASE_URL'] as const
+    for (const field of required) {
+      if (!data[field]) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `${field} is required when USE_LOCAL_STORAGE is false and S3_ENDPOINT is set`,
+          path: [field],
+        })
+      }
+    }
+  }
 })
 
 export type Config = z.infer<typeof envSchema>
@@ -43,10 +56,3 @@ export function getConfig(): Config {
   if (!_config) throw new Error('Config not loaded. Call loadConfig() first.')
   return _config
 }
-
-export const VIEWPORT_PRESETS = {
-  card: { width: 1366, height: 768 },
-  detail: { width: 1280, height: 800 },
-} as const
-
-export type ViewportName = keyof typeof VIEWPORT_PRESETS

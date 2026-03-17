@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import type { FastifyRequest, FastifyReply } from 'fastify'
-import { getConfig } from '../../shared/config.js'
+import { getConfig } from '../../config/index.js'
 
 export async function apiKeyAuth(
   request: FastifyRequest,

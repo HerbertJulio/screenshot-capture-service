@@ -4,7 +4,7 @@
   "description": "Screenshot Capture Service - automated URL preview generation via headless browser",
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "tsx watch --clear-screen=false src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
     "lint": "eslint src/",

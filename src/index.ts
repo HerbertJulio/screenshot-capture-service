@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import pino from 'pino'
 
-// Load .env file
+// Load .env file before anything else
 try {
   const envPath = resolve(process.cwd(), '.env')
   const envContent = readFileSync(envPath, 'utf-8')
@@ -19,54 +19,61 @@ try {
   }
 } catch {}
 
-import { loadConfig } from './shared/config.js'
-import { initDatabase } from './shared/db/database.js'
+import { loadConfig } from './config/index.js'
+import { initDatabase } from './infra/database/connection.js'
 import { createApp } from './api/server.js'
-import { startWorker, stopWorker } from './worker/job-processor.js'
-import { shutdownBrowser } from './worker/capture-engine.js'
-import { enableLocalStorage } from './processing/storage-uploader.js'
+import { createContainer } from './container.js'
+import { JobProcessor } from './worker/job-processor.js'
+import { DEFAULT_POLL_MS } from './config/constants.js'
 
 const logger = pino({ name: 'scs' })
 
 async function main() {
-  // Load config
   const config = loadConfig()
   logger.info({ port: config.PORT, env: config.NODE_ENV }, 'Starting Screenshot Capture Service')
 
-  // Enable local storage if S3 not configured or explicitly requested
-  if (config.USE_LOCAL_STORAGE || !config.S3_ENDPOINT) {
-    enableLocalStorage()
-  }
-
-  // Ensure DB directory exists
+  // Database
   mkdirSync(dirname(config.DB_PATH), { recursive: true })
-
-  // Init database
-  initDatabase()
+  initDatabase(config.DB_PATH)
   logger.info('Database initialized')
 
-  // Create API server
-  const app = createApp()
+  // Container (wires all dependencies)
+  const container = createContainer(config)
 
-  // Start worker (inline, same process)
-  startWorker(1000)
+  // API
+  const app = createApp(container)
+
+  // Worker
+  const worker = new JobProcessor({
+    jobRepo: container.jobRepo,
+    screenshotRepo: container.screenshotRepo,
+    storage: container.storage,
+    browserPool: container.browserPool,
+    callbackNotifier: container.callbackNotifier,
+    maxConcurrent: config.MAX_CONCURRENT_CAPTURES,
+  })
+  worker.start(DEFAULT_POLL_MS)
   logger.info('Worker started')
 
-  // Start server
+  // Listen
   await app.listen({ port: config.PORT, host: config.HOST })
   logger.info({ port: config.PORT, host: config.HOST }, 'API server listening')
 
   // Graceful shutdown
+  let shuttingDown = false
   const shutdown = async (signal: string) => {
+    if (shuttingDown) return
+    shuttingDown = true
     logger.info({ signal }, 'Shutting down...')
-    stopWorker()
-    await shutdownBrowser()
+    worker.stop()
+    await container.browserPool.shutdown()
     await app.close()
     process.exit(0)
   }
 
   process.on('SIGTERM', () => shutdown('SIGTERM'))
   process.on('SIGINT', () => shutdown('SIGINT'))
+  process.on('SIGHUP', () => shutdown('SIGHUP'))
 }
 
 main().catch((err) => {

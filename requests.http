@@ -1,12 +1,34 @@
 ### ============================================================================
-### Screenshot Capture Service — Tests
+### Screenshot Capture Service — API Tests
 ### ============================================================================
 
 @baseUrl = http://localhost:3000
 @apiKey = dev-api-key
 
 
-### Capture a screenshot from a website
+### ============================================================================
+### Health & Monitoring
+### ============================================================================
+
+### Liveness probe
+GET {{baseUrl}}/healthz
+
+###
+
+### Readiness probe (checks database)
+GET {{baseUrl}}/readyz
+
+###
+
+### Prometheus metrics
+GET {{baseUrl}}/metrics
+
+
+### ============================================================================
+### Captures
+### ============================================================================
+
+### Create a single capture job
 POST {{baseUrl}}/v1/captures
 Content-Type: application/json
 X-API-Key: {{apiKey}}
@@ -16,7 +38,7 @@ X-API-Key: {{apiKey}}
   "entity_type": "application",
   "entity_id": "github-home",
   "options": {
-    "viewports": ["card"],
+    "viewports": ["card", "detail"],
     "wait_strategy": "domcontentloaded",
     "delay_after_load_ms": 3000
   }
@@ -24,7 +46,123 @@ X-API-Key: {{apiKey}}
 
 ###
 
-### Check result (replace the job_id)
-@jobId = REPLACE_WITH_JOB_ID
+### Create a capture with callback URL
+POST {{baseUrl}}/v1/captures
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "url": "https://example.com",
+  "entity_type": "template",
+  "entity_id": "example-template",
+  "callback_url": "https://your-server.com/webhook/capture-done",
+  "options": {
+    "viewports": ["card"],
+    "wait_strategy": "networkidle",
+    "wait_selector": "#main-content",
+    "wait_timeout_ms": 20000,
+    "delay_after_load_ms": 2000
+  }
+}
+
+###
+
+### Create a capture with default options
+POST {{baseUrl}}/v1/captures
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "url": "https://example.com",
+  "entity_type": "deployment",
+  "entity_id": "deploy-v1"
+}
+
+###
+
+### Bulk capture (multiple URLs)
+POST {{baseUrl}}/v1/captures/bulk
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "items": [
+    {
+      "url": "https://github.com",
+      "entity_type": "application",
+      "entity_id": "github-page"
+    },
+    {
+      "url": "https://example.com",
+      "entity_type": "template",
+      "entity_id": "example-page"
+    },
+    {
+      "url": "https://httpbin.org/html",
+      "entity_type": "template",
+      "entity_id": "httpbin-html"
+    }
+  ],
+  "priority": "high"
+}
+
+###
+
+### Check job status (replace with actual job_id)
+@jobId = 5c064d01-832f-4cd5-af70-a5d503cce4ba
 GET {{baseUrl}}/v1/captures/{{jobId}}
 X-API-Key: {{apiKey}}
+
+
+### ============================================================================
+### Entity Screenshots
+### ============================================================================
+
+### Get latest screenshots for an entity
+GET {{baseUrl}}/v1/entities/application/github-home/screenshots
+X-API-Key: {{apiKey}}
+
+###
+
+### Get screenshots for a template
+GET {{baseUrl}}/v1/entities/template/example-template/screenshots
+X-API-Key: {{apiKey}}
+
+###
+
+### Delete all screenshots for an entity
+DELETE {{baseUrl}}/v1/entities/template/example-template/screenshots
+X-API-Key: {{apiKey}}
+
+
+### ============================================================================
+### Webhook Events
+### ============================================================================
+
+### Template published event (requires HMAC-SHA256 signature)
+### Generate signature: echo -n '<body>' | openssl dgst -sha256 -hmac "your-webhook-secret"
+POST {{baseUrl}}/v1/events
+Content-Type: application/json
+X-Webhook-Signature: <replace-with-hmac-sha256-hex-signature>
+
+{
+  "event_type": "template.published",
+  "entity_type": "template",
+  "entity_id": "new-template-456",
+  "url": "https://example.com/preview/new-template-456",
+  "timestamp": "2025-01-15T10:30:00.000Z"
+}
+
+###
+
+### Deployment finished event
+POST {{baseUrl}}/v1/events
+Content-Type: application/json
+X-Webhook-Signature: <replace-with-hmac-sha256-hex-signature>
+
+{
+  "event_type": "deployment.finished",
+  "entity_type": "deployment",
+  "entity_id": "deploy-789",
+  "url": "https://my-app.example.com"
+}
